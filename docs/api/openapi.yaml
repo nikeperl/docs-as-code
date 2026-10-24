@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: ACMS Censor API
+  description: Учебное API для автоматической цензуры изображений. Реальный сервер не требуется.
+  version: 1.0.0
+servers:
+  - url: https://example.com/api/v1
+paths:
+  /censorings:
+    post:
+      summary: Обработать изображение
+      description: Обнаруживает объекты выбранных категорий, скрывает их и сохраняет отдельный файл. Если совпадений нет, сохраняет копию без изменений.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - categories
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Изображение в формате JPEG или PNG.
+                categories:
+                  type: array
+                  minItems: 1
+                  description: Категории для цензуры из GET /categories.
+                  items:
+                    type: string
+                  example: [cigarette]
+                method:
+                  type: string
+                  description: Способ скрытия объектов.
+                  enum: [blur, pixelation]
+                  default: pixelation
+            encoding:
+              file:
+                contentType: image/jpeg, image/png
+      responses:
+        '201':
+          description: Изображение обработано, результат сохранён.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CensoringResult'
+        '400':
+          description: Файл не читается, формат не поддерживается или параметры некорректны.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_INPUT
+                message: Передайте изображение JPEG или PNG и хотя бы одну доступную категорию.
+        '500':
+          description: Ошибка модели, обработки или сохранения изображения. Готовый результат не предоставляется.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: PROCESSING_FAILED
+                message: Не удалось обработать изображение.
+  /censorings/{id}:
+    get:
+      summary: Получить результат обработки
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор результата, полученный при обработке изображения.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Результат найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CensoringResult'
+        '404':
+          description: Результат с указанным идентификатором не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: RESULT_NOT_FOUND
+                message: Результат обработки не найден.
+  /categories:
+    get:
+      summary: Получить доступные категории объектов
+      responses:
+        '200':
+          description: Категории, доступные для цензуры изображений.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                example: [cigarette]
+        '500':
+          description: Не удалось получить список категорий.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: CATEGORIES_UNAVAILABLE
+                message: Список категорий недоступен.
+components:
+  schemas:
+    CensoringResult:
+      type: object
+      required:
+        - id
+        - outputUrl
+        - censoredObjectCount
+      properties:
+        id:
+          type: integer
+          minimum: 1
+          description: Идентификатор сохранённого результата.
+          example: 1
+        outputUrl:
+          type: string
+          format: uri
+          description: Ссылка для скачивания обработанного изображения. Исходный файл не перезаписывается.
+          example: https://example.com/results/1.png
+        censoredObjectCount:
+          type: integer
+          minimum: 0
+          description: Число скрытых объектов. При отсутствии совпадений равно нулю.
+          example: 1
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Код ошибки.
+        message:
+          type: string
+          description: Описание ошибки для пользователя.
